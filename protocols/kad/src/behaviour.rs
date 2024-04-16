@@ -220,12 +220,12 @@ impl Config {
             kbucket_pending_timeout: Duration::from_secs(60),
             query_config: QueryConfig::default(),
             protocol_config: ProtocolConfig::new(protocol_name),
-            record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
+            record_ttl: Some(Duration::from_secs(48 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
-            record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
+            record_publication_interval: Some(Duration::from_secs(22 * 60 * 60)),
             record_filtering: StoreInserts::Unfiltered,
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
-            provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
+            provider_record_ttl: Some(Duration::from_secs(48 * 60 * 60)),
             kbucket_inserts: BucketInserts::OnConnected,
             caching: Caching::Enabled { max_peers: 1 },
             periodic_bootstrap_interval: Some(Duration::from_secs(5 * 60)),
@@ -628,9 +628,7 @@ where
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
                         self.queued_events.push_back(ToSwarm::Dial {
-                            opts: DialOpts::peer_id(disconnected.into_preimage())
-                                .condition(dial_opts::PeerCondition::NotDialing)
-                                .build(),
+                            opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
                         });
                         RoutingUpdate::Pending
                     }
@@ -1180,16 +1178,12 @@ where
         target: &kbucket::Key<T>,
         source: &PeerId,
     ) -> Vec<KadPeer> {
-        if target == self.kbuckets.local_key() {
-            Vec::new()
-        } else {
-            self.kbuckets
-                .closest(target)
-                .filter(|e| e.node.key.preimage() != source)
-                .take(self.queries.config().replication_factor.get())
-                .map(KadPeer::from)
-                .collect()
-        }
+        self.kbuckets
+            .closest(target)
+            .filter(|e| e.node.key.preimage() != source)
+            .take(self.queries.config().replication_factor.get())
+            .map(KadPeer::from)
+            .collect()
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
@@ -1379,7 +1373,6 @@ where
                                 if !self.connected_peers.contains(disconnected.preimage()) {
                                     self.queued_events.push_back(ToSwarm::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
-                                            .condition(dial_opts::PeerCondition::NotDialing)
                                             .build(),
                                     })
                                 }
@@ -2599,9 +2592,7 @@ where
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(ToSwarm::Dial {
-                                opts: DialOpts::peer_id(peer_id)
-                                    .condition(dial_opts::PeerCondition::NotDialing)
-                                    .build(),
+                                opts: DialOpts::peer_id(peer_id).build(),
                             });
                         }
                     }

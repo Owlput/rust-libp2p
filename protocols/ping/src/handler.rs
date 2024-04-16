@@ -95,12 +95,12 @@ pub enum Failure {
     Unsupported,
     /// The ping failed for reasons other than a timeout.
     Other {
-        error: Box<dyn std::error::Error + Sync + Send + 'static>,
+        error: Box<dyn std::error::Error + Send + Sync + 'static>,
     },
 }
 
 impl Failure {
-    fn other(e: impl std::error::Error + Sync + Send + 'static) -> Self {
+    fn other(e: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Other { error: Box::new(e) }
     }
 }
