@@ -25,12 +25,11 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    ConnectionDenied, DialError, ExternalAddrExpired, ExternalAddresses, ListenAddresses,
+    NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 
-use std::collections::hash_map::Entry;
 use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -50,7 +49,7 @@ pub struct Behaviour {
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
 
     /// The address a remote observed for us.
-    our_observed_addresses: HashMap<ConnectionId, Multiaddr>,
+    our_observed_addresses: HashSet<Multiaddr>,
 
     /// Pending events to be emitted when polled.
     events: VecDeque<ToSwarm<Event, InEvent>>,
@@ -258,7 +257,7 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        id: ConnectionId,
+        _id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         match event {
@@ -285,26 +284,10 @@ impl NetworkBehaviour for Behaviour {
                     }
                 }
 
-                match self.our_observed_addresses.entry(id) {
-                    Entry::Vacant(not_yet_observed) => {
-                        not_yet_observed.insert(observed.clone());
-                        self.events
-                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
-                    }
-                    Entry::Occupied(already_observed) if already_observed.get() == &observed => {
-                        // No-op, we already observed this address.
-                    }
-                    Entry::Occupied(mut already_observed) => {
-                        tracing::info!(
-                            old_address=%already_observed.get(),
-                            new_address=%observed,
-                            "Our observed address on connection {id} changed",
-                        );
-
-                        *already_observed.get_mut() = observed.clone();
-                        self.events
-                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
-                    }
+                if !self.our_observed_addresses.contains(&observed) {
+                    let _ = self.our_observed_addresses.insert(observed.clone());
+                    self.events
+                        .push_back(ToSwarm::NewExternalAddrCandidate(observed));
                 }
             }
             handler::Event::Identification => {
@@ -392,8 +375,6 @@ impl NetworkBehaviour for Behaviour {
                 } else if let Some(addrs) = self.connected.get_mut(&peer_id) {
                     addrs.remove(&connection_id);
                 }
-
-                self.our_observed_addresses.remove(&connection_id);
             }
             FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
                 if let (Some(peer_id), Some(cache), DialError::Transport(errors)) =
@@ -403,6 +384,9 @@ impl NetworkBehaviour for Behaviour {
                         cache.remove(&peer_id, addr);
                     }
                 }
+            }
+            FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
+                let _ = self.our_observed_addresses.remove(addr);
             }
             _ => {}
         }
