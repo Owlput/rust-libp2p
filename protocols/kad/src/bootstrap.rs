@@ -26,8 +26,8 @@ pub(crate) struct Status {
     /// Number of bootstrap requests currently in progress. We ensure neither periodic bootstrap
     /// or automatic bootstrap trigger new requests when there is still some running.
     current_bootstrap_requests: usize,
-    /// Waker to wake up the `poll` method if progress is ready to be made.
-    waker: Option<Waker>,
+    // /// Waker to wake up the `poll` method if progress is ready to be made.
+    // waker: Option<Waker>,
 }
 
 impl Status {
@@ -37,7 +37,7 @@ impl Status {
     ) -> Self {
         Self {
             interval_and_delay: periodic_interval.map(|interval| (interval, Delay::new(interval))),
-            waker: None,
+            // waker: None,
             automatic_throttle,
             throttle_timer: None,
             current_bootstrap_requests: 0,
@@ -55,10 +55,10 @@ impl Status {
             // The user disabled bootstrapping on new peer in the routing table.
         }
 
-        // Waking up the waker that could have been registered.
-        if let Some(waker) = self.waker.take() {
-            waker.wake()
-        }
+        // // Waking up the waker that could have been registered.
+        // if let Some(waker) = self.waker.take() {
+        //     waker.wake()
+        // }
     }
 
     pub(crate) fn on_started(&mut self) {
@@ -87,15 +87,15 @@ impl Status {
         }
 
         // Waking up the waker that could have been registered.
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
+        // if let Some(waker) = self.waker.take() {
+        //     waker.wake();
+        // }
     }
 
     pub(crate) fn poll_next_bootstrap(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         if self.current_bootstrap_requests > 0 {
             // Some bootstrap request(s) is(are) currently running.
-            self.waker = Some(cx.waker().clone());
+            // self.waker = Some(cx.waker().clone());
             return Poll::Pending;
         }
 
@@ -127,7 +127,7 @@ impl Status {
         }
 
         // Registering the `waker` so that we can wake up when calling `on_new_peer_in_routing_table`.
-        self.waker = Some(cx.waker().clone());
+        // self.waker = Some(cx.waker().clone());
         Poll::Pending
     }
 

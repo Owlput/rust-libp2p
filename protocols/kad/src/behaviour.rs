@@ -262,7 +262,7 @@ impl Config {
     /// > as the replication factor, i.e. this is not a request timeout.
     ///
     /// The default is 60 seconds.
-    pub fn set_query_timeout(&mut self, timeout: Duration) -> &mut Self {
+    pub fn set_query_timeout(mut self, timeout: Duration) -> Self {
         self.query_config.timeout = timeout;
         self
     }
@@ -271,7 +271,7 @@ impl Config {
     ///
     /// The replication factor determines to how many closest peers
     /// a record is replicated. The default is [`K_VALUE`].
-    pub fn set_replication_factor(&mut self, replication_factor: NonZeroUsize) -> &mut Self {
+    pub fn set_replication_factor(mut self, replication_factor: NonZeroUsize) -> Self {
         self.query_config.replication_factor = replication_factor;
         self
     }
@@ -288,7 +288,7 @@ impl Config {
     ///
     /// When used with [`Config::disjoint_query_paths`] it equals
     /// the amount of disjoint paths used.
-    pub fn set_parallelism(&mut self, parallelism: NonZeroUsize) -> &mut Self {
+    pub fn set_parallelism(mut self, parallelism: NonZeroUsize) -> Self {
         self.query_config.parallelism = parallelism;
         self
     }
@@ -301,7 +301,7 @@ impl Config {
     ///
     /// See the S/Kademlia paper for more information on the high level design
     /// as well as its security improvements.
-    pub fn disjoint_query_paths(&mut self, enabled: bool) -> &mut Self {
+    pub fn disjoint_query_paths(mut self, enabled: bool) -> Self {
         self.query_config.disjoint_query_paths = enabled;
         self
     }
@@ -315,7 +315,7 @@ impl Config {
     /// `None` means records never expire.
     ///
     /// Does not apply to provider records.
-    pub fn set_record_ttl(&mut self, record_ttl: Option<Duration>) -> &mut Self {
+    pub fn set_record_ttl(mut self, record_ttl: Option<Duration>) -> Self {
         self.record_ttl = record_ttl;
         self
     }
@@ -324,7 +324,7 @@ impl Config {
     ///
     /// See [`StoreInserts`] for the different values.
     /// Defaults to [`StoreInserts::Unfiltered`].
-    pub fn set_record_filtering(&mut self, filtering: StoreInserts) -> &mut Self {
+    pub fn set_record_filtering(mut self, filtering: StoreInserts) -> Self {
         self.record_filtering = filtering;
         self
     }
@@ -374,7 +374,7 @@ impl Config {
     /// `None` means that stored provider records never expire.
     ///
     /// Must be significantly larger than the provider publication interval.
-    pub fn set_provider_record_ttl(&mut self, ttl: Option<Duration>) -> &mut Self {
+    pub fn set_provider_record_ttl(mut self, ttl: Option<Duration>) -> Self {
         self.provider_record_ttl = ttl;
         self
     }
@@ -421,7 +421,7 @@ impl Config {
     ///
     /// * Default to `5` minutes.
     /// * Set to `None` to disable periodic bootstrap.
-    pub fn set_periodic_bootstrap_interval(&mut self, interval: Option<Duration>) -> &mut Self {
+    pub fn set_periodic_bootstrap_interval(mut self, interval: Option<Duration>) -> Self {
         self.periodic_bootstrap_interval = interval;
         self
     }
@@ -436,10 +436,7 @@ impl Config {
     ///     is inserted in the routing table.
     /// * Set to `None` to disable automatic bootstrap (no bootstrap request will be triggered when a new
     ///     peer is inserted in the routing table).
-    pub fn set_automatic_bootstrap_throttle(
-        mut self,
-        duration: Option<Duration>,
-    ) -> Self {
+    pub fn set_automatic_bootstrap_throttle(mut self, duration: Option<Duration>) -> Self {
         self.automatic_bootstrap_throttle = duration;
         self
     }
