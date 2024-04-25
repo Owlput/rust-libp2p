@@ -73,6 +73,7 @@ where
 
         loop {
             if this.max_circuit_bytes > 0 && this.bytes_sent > this.max_circuit_bytes {
+                println!("Disconnect due to quota");
                 return Poll::Ready(Err(io::Error::new(
                     io::ErrorKind::Other,
                     "Max circuit bytes reached.",

@@ -43,6 +43,7 @@ use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{fmt, io};
+use tracing::{trace, trace_span};
 
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
@@ -370,10 +371,14 @@ pub struct Handler {
         CircuitId,
         Result<outbound_stop::Circuit, outbound_stop::Error>,
     >,
+    /// Log span for this connection handler.
+    span: tracing::Span,
 }
 
 impl Handler {
-    pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
+    pub fn new(config: Config, endpoint: ConnectedPoint, connection_id: usize) -> Handler {
+        let span = trace_span!("RelayedConnectionHandler", conn = connection_id);
+        span.in_scope(|| trace!("Handler spawned"));
         Handler {
             inbound_workers: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
@@ -394,6 +399,7 @@ impl Handler {
             active_reservation: Default::default(),
             pending_connect_requests: Default::default(),
             active_connect_requests: Default::default(),
+            span,
         }
     }
 
@@ -408,6 +414,7 @@ impl Handler {
             ))
             .is_err()
         {
+            let _entered = self.span.enter();
             tracing::warn!("Dropping inbound stream because we are at capacity")
         }
     }
@@ -431,6 +438,7 @@ impl Handler {
             )
             .is_err()
         {
+            let _entered = self.span.enter();
             tracing::warn!("Dropping outbound stream because we are at capacity")
         }
 
@@ -491,11 +499,13 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+        let _entered = self.span.enter();
         match event {
             In::AcceptReservationReq {
                 inbound_reservation_req,
                 addrs,
             } => {
+                trace!("Inbound reservation accepted");
                 if self
                     .reservation_request_future
                     .replace(ReservationRequestFuture::Accepting(
@@ -510,6 +520,7 @@ impl ConnectionHandler for Handler {
                 inbound_reservation_req,
                 status,
             } => {
+                trace!("Denying inbound reservation");
                 if self
                     .reservation_request_future
                     .replace(ReservationRequestFuture::Denying(
@@ -526,6 +537,7 @@ impl ConnectionHandler for Handler {
                 src_peer_id,
                 src_connection_id,
             } => {
+                trace!("Negotiating outbound connection");
                 self.pending_connect_requests.push_back(PendingConnect::new(
                     circuit_id,
                     inbound_circuit_req,
@@ -543,6 +555,7 @@ impl ConnectionHandler for Handler {
                 inbound_circuit_req,
                 status,
             } => {
+                trace!("Denying circuit request");
                 let dst_peer_id = inbound_circuit_req.dst();
                 self.circuit_deny_futures.push(
                     inbound_circuit_req
@@ -559,6 +572,11 @@ impl ConnectionHandler for Handler {
                 dst_stream,
                 dst_pending_data,
             } => {
+                trace!(
+                    "Driving circuit {} to {}",
+                    circuit_id.into_inner(),
+                    dst_peer_id
+                );
                 self.circuit_accept_futures.push(
                     inbound_circuit_req
                         .accept()
@@ -586,13 +604,13 @@ impl ConnectionHandler for Handler {
         Instant::now().duration_since(idle_at) <= Duration::from_secs(10)
     }
 
-    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
+        let _entered = self.span.enter();
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
@@ -604,22 +622,28 @@ impl ConnectionHandler for Handler {
         {
             match result {
                 Ok(()) => {
+                    trace!("Closing circuit {}", circuit_id.into_inner());
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::CircuitClosed {
                             circuit_id,
                             dst_peer_id,
                             error: None,
                         },
-                    ))
+                    ));
                 }
                 Err(e) => {
+                    trace!(
+                        "Closing circuit {} due to error {:?}",
+                        circuit_id.into_inner(),
+                        e
+                    );
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::CircuitClosed {
                             circuit_id,
                             dst_peer_id,
                             error: Some(e),
                         },
-                    ))
+                    ));
                 }
             }
         }
@@ -628,6 +652,7 @@ impl ConnectionHandler for Handler {
         loop {
             match self.inbound_workers.poll_unpin(cx) {
                 Poll::Ready(Ok(Ok(Either::Left(inbound_reservation_req)))) => {
+                    trace!("Reservation request received");
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::ReservationReqReceived {
                             inbound_reservation_req,
@@ -637,6 +662,7 @@ impl ConnectionHandler for Handler {
                     ));
                 }
                 Poll::Ready(Ok(Ok(Either::Right(inbound_circuit_req)))) => {
+                    trace!("Circuit request received");
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::CircuitReqReceived {
                             inbound_circuit_req,

@@ -41,6 +41,7 @@ use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use tracing::{trace, trace_span};
 
 /// Configuration for the relay [`Behaviour`].
 ///
@@ -247,6 +248,8 @@ pub struct Behaviour {
     queued_actions: VecDeque<ToSwarm<Event, THandlerInEvent<Self>>>,
 
     external_addresses: ExternalAddresses,
+
+    span: tracing::Span,
 }
 
 impl Behaviour {
@@ -258,6 +261,7 @@ impl Behaviour {
             circuits: Default::default(),
             queued_actions: Default::default(),
             external_addresses: Default::default(),
+            span: trace_span!("RelayBehaviour", peer = local_peer_id.to_string()),
         }
     }
 
@@ -269,6 +273,12 @@ impl Behaviour {
             ..
         }: ConnectionClosed,
     ) {
+        let _entered = self.span.enter();
+        trace!(
+            "Connection to peer {}:{} closed",
+            peer_id,
+            connection_id.into_inner()
+        );
         if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(peer_id) {
             peer.get_mut().remove(&connection_id);
             if peer.get().is_empty() {
@@ -283,6 +293,11 @@ impl Behaviour {
             // Only emit [`CircuitClosed`] for accepted requests.
             .filter(|c| matches!(c.status, CircuitStatus::Accepted))
         {
+            trace!(
+                "Closing circuit from {} to {}",
+                circuit.src_connection_id,
+                circuit.dst_connection_id
+            );
             self.queued_actions
                 .push_back(ToSwarm::GenerateEvent(Event::CircuitClosed {
                     src_peer_id: circuit.src_peer_id,
@@ -299,16 +314,19 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        id: ConnectionId,
+        peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        let _entered = self.span.enter();
         if local_addr.is_relayed() {
+            trace!("Connection from {} is relayed, not handling.", peer);
             // Deny all substreams on relayed connection.
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
 
+        trace!("Connection from {} as listener", peer);
         Ok(Either::Left(Handler::new(
             handler::Config {
                 reservation_duration: self.config.reservation_duration,
@@ -319,21 +337,25 @@ impl NetworkBehaviour for Behaviour {
                 local_addr: local_addr.clone(),
                 send_back_addr: remote_addr.clone(),
             },
+            id.into_inner(),
         )))
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        id: ConnectionId,
+        peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        let _entered = self.span.enter();
         if addr.is_relayed() {
+            trace!("Connection from {} is relayed, not handling.", peer);
             // Deny all substreams on relayed connection.
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
 
+        trace!("Connection from {} as dialer", peer);
         Ok(Either::Left(Handler::new(
             handler::Config {
                 reservation_duration: self.config.reservation_duration,
@@ -344,6 +366,7 @@ impl NetworkBehaviour for Behaviour {
                 address: addr.clone(),
                 role_override,
             },
+            id.into_inner(),
         )))
     }
 
@@ -361,11 +384,13 @@ impl NetworkBehaviour for Behaviour {
         connection: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
+        let _entered = self.span.enter();
         let event = match event {
             Either::Left(e) => e,
             Either::Right(v) => void::unreachable(v),
         };
 
+        trace!("Event from handler on {}: {:?}", event_source, event);
         match event {
             handler::Event::ReservationReqReceived {
                 inbound_reservation_req,
@@ -784,6 +809,12 @@ enum CircuitStatus {
 
 #[derive(Default, Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub struct CircuitId(u64);
+
+impl CircuitId {
+    pub fn into_inner(self) -> u64 {
+        self.0
+    }
+}
 
 impl Add<u64> for CircuitId {
     type Output = CircuitId;

@@ -77,6 +77,10 @@ impl ConnectionId {
         Self(id)
     }
 
+    pub fn into_inner(self) -> usize {
+        self.0
+    }
+
     /// Returns the next available [`ConnectionId`].
     pub(crate) fn next() -> Self {
         Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
