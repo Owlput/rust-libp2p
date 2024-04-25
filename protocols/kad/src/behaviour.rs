@@ -436,11 +436,10 @@ impl Config {
     ///     is inserted in the routing table.
     /// * Set to `None` to disable automatic bootstrap (no bootstrap request will be triggered when a new
     ///     peer is inserted in the routing table).
-    #[cfg(test)]
-    pub(crate) fn set_automatic_bootstrap_throttle(
-        &mut self,
+    pub fn set_automatic_bootstrap_throttle(
+        mut self,
         duration: Option<Duration>,
-    ) -> &mut Self {
+    ) -> Self {
         self.automatic_bootstrap_throttle = duration;
         self
     }
