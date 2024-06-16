@@ -754,6 +754,7 @@ where
                                         send_back_addr: &send_back_addr,
                                         error: &listen_error,
                                         connection_id: id,
+                                        peer_id: Some(peer_id),
                                     },
                                 ));
 
@@ -867,6 +868,7 @@ where
                         send_back_addr: &send_back_addr,
                         error: &error,
                         connection_id: id,
+                        peer_id: None,
                     }));
                 self.pending_swarm_events
                     .push_back(SwarmEvent::IncomingConnectionError {
@@ -970,6 +972,7 @@ where
                                 send_back_addr: &send_back_addr,
                                 error: &listen_error,
                                 connection_id,
+                                peer_id: None,
                             }));
 
                         self.pending_swarm_events
@@ -1147,7 +1150,7 @@ where
                     addrs
                 };
 
-                // If address translation yielded nothing, broacast the original candidate address.
+                // If address translation yielded nothing, broadcast the original candidate address.
                 if translated_addresses.is_empty() {
                     self.behaviour
                         .on_swarm_event(FromSwarm::NewExternalAddrCandidate(

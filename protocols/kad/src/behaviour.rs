@@ -36,7 +36,6 @@ use crate::record::{
 use crate::K_VALUE;
 use crate::{jobs::*, protocol};
 use fnv::{FnvHashMap, FnvHashSet};
-use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
@@ -57,6 +56,7 @@ use std::time::Duration;
 use std::vec;
 use thiserror::Error;
 use tracing::Level;
+use web_time::Instant;
 
 pub use crate::query::QueryStats;
 
@@ -921,13 +921,13 @@ where
     /// > See [`Behaviour::add_address`].
     ///
     /// > **Note**: Bootstrap does not require to be called manually. It is periodically
-    /// invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
-    /// [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
-    /// when a new peer is inserted in the routing table.
-    /// This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
-    /// to ensure a healthy routing table.
+    /// > invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
+    /// > [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
+    /// > when a new peer is inserted in the routing table.
+    /// > This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
+    /// > to ensure a healthy routing table.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
-        let local_key = self.kbuckets.local_key().clone();
+        let local_key = *self.kbuckets.local_key();
         let info = QueryInfo::Bootstrap {
             peer: *local_key.preimage(),
             remaining: None,
@@ -1392,7 +1392,7 @@ where
                 remaining,
                 mut step,
             } => {
-                let local_key = self.kbuckets.local_key().clone();
+                let local_key = *self.kbuckets.local_key();
                 let mut remaining = remaining.unwrap_or_else(|| {
                     debug_assert_eq!(&peer, local_key.preimage());
                     // The lookup for the local key finished. To complete the bootstrap process,
@@ -1442,7 +1442,7 @@ where
                     let peers = self.kbuckets.closest_keys(&target);
                     let inner = QueryInner::new(info);
                     self.queries
-                        .continue_iter_closest(query_id, target.clone(), peers, inner);
+                        .continue_iter_closest(query_id, target, peers, inner);
                 } else {
                     step.last = true;
                     self.bootstrap_status.on_finish();
@@ -1638,14 +1638,14 @@ where
                     remaining.take().and_then(|mut r| Some((r.next()?, r)))
                 {
                     let info = QueryInfo::Bootstrap {
-                        peer: target.clone().into_preimage(),
+                        peer: target.into_preimage(),
                         remaining: Some(remaining),
                         step: step.next(),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
                     let inner = QueryInner::new(info);
                     self.queries
-                        .continue_iter_closest(query_id, target.clone(), peers, inner);
+                        .continue_iter_closest(query_id, target, peers, inner);
                 } else {
                     step.last = true;
                     self.bootstrap_status.on_finish();

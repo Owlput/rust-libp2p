@@ -1,4 +1,4 @@
-## 0.46.0 -- unreleased
+## 0.46.0
 
 - Changed `FIND_NODE` response: now includes a list of closest peers when querying the recipient peer ID. Previously, this request yielded an empty response.
   See [PR 5270](https://github.com/libp2p/rust-libp2p/pull/5270)
@@ -15,6 +15,10 @@
   See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122).
 - Compute `jobs_query_capacity` accurately.
   See [PR 5148](https://github.com/libp2p/rust-libp2p/pull/5148).
+- Derive `Copy` for `kbucket::key::Key<T>`.
+  See [PR 5317](https://github.com/libp2p/rust-libp2p/pull/5317).
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 
 ## 0.45.3
 
