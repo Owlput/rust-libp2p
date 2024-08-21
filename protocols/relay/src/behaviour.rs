@@ -28,6 +28,7 @@ use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use libp2p_core::multiaddr::Protocol;
+use libp2p_core::transport::PortUse;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
@@ -347,6 +348,7 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let _entered = self.span.enter();
         if addr.is_relayed() {
@@ -365,6 +367,7 @@ impl NetworkBehaviour for Behaviour {
             ConnectedPoint::Dialer {
                 address: addr.clone(),
                 role_override,
+                port_use,
             },
             id.into_inner(),
         )))
