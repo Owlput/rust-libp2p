@@ -27,12 +27,11 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
-    _address_translation,
+    ConnectionDenied, DialError, ExternalAddrExpired, ExternalAddresses, ListenAddresses, NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm, _address_translation
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 
+use std::collections::hash_map::Entry;
 use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -530,7 +529,7 @@ impl NetworkBehaviour for Behaviour {
                 }
             }
             FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
-                let _ = self.our_observed_addresses.remove(addr);
+                let _ = self.our_observed_addresses.retain(|_,v|{v != addr});
             }
             _ => {}
         }

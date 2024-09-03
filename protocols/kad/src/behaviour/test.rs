@@ -499,9 +499,9 @@ fn put_record() {
 
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
         let mut config = Config::new(PROTOCOL_NAME)
-            .set_replication_factor(replication_factor)
             .set_periodic_bootstrap_interval(None)
             .set_automatic_bootstrap_throttle(None);
+        config.set_replication_factor(replication_factor);
         if rng.gen() {
             config = config.disjoint_query_paths(true);
         }
@@ -870,9 +870,9 @@ fn add_provider() {
         let num_total = usize::max(4, replication_factor.get() * 2);
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
         let mut config = Config::new(PROTOCOL_NAME)
-            .set_replication_factor(replication_factor)
             .set_periodic_bootstrap_interval(None)
             .set_automatic_bootstrap_throttle(None);
+        config.set_replication_factor(replication_factor);
         if rng.gen() {
             config = config.disjoint_query_paths(true);
         }
