@@ -123,7 +123,7 @@ pub use self::subscription_filter::{
     MaxCountSubscriptionFilter, RegexSubscriptionFilter, TopicSubscriptionFilter,
     WhitelistSubscriptionFilter,
 };
-pub use self::topic::{Hasher, Topic, TopicHash};
+pub use self::topic::{Hasher, Topic, TopicHash, IdentityHash, Sha256Hash};
 pub use self::transform::{DataTransform, IdentityTransform};
 pub use self::types::{Message, MessageAcceptance, MessageId, RawMessage};
 
