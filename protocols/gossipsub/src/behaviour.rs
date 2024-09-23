@@ -514,15 +514,14 @@ where
     ///
     /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
     /// subscribed.
-    pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
-        tracing::debug!(%topic, "Subscribing to topic");
-        let topic_hash = topic.hash();
-        if !self.subscription_filter.can_subscribe(&topic_hash) {
+    pub fn subscribe(&mut self, topic_hash: &TopicHash) -> Result<bool, SubscriptionError> {
+        tracing::debug!(%topic_hash, "Subscribing to topic");
+        if !self.subscription_filter.can_subscribe(topic_hash) {
             return Err(SubscriptionError::NotAllowed);
         }
 
-        if self.mesh.contains_key(&topic_hash) {
-            tracing::debug!(%topic, "Topic is already in the mesh");
+        if self.mesh.contains_key(topic_hash) {
+            tracing::debug!(%topic_hash, "Topic is already in the mesh");
             return Ok(false);
         }
 
@@ -535,8 +534,8 @@ where
 
         // call JOIN(topic)
         // this will add new peers to the mesh for the topic
-        self.join(&topic_hash);
-        tracing::debug!(%topic, "Subscribed to topic");
+        self.join(topic_hash);
+        tracing::debug!(%topic_hash, "Subscribed to topic");
         Ok(true)
     }
 
@@ -544,11 +543,10 @@ where
     ///
     /// Returns [`Ok(true)`] if we were subscribed to this topic.
     #[allow(clippy::unnecessary_wraps)]
-    pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, PublishError> {
-        tracing::debug!(%topic, "Unsubscribing from topic");
-        let topic_hash = topic.hash();
+    pub fn unsubscribe(&mut self, topic_hash: &TopicHash) -> Result<bool, PublishError> {
+        tracing::debug!(%topic_hash, "Unsubscribing from topic");
 
-        if !self.mesh.contains_key(&topic_hash) {
+        if !self.mesh.contains_key(topic_hash) {
             tracing::debug!(topic=%topic_hash, "Already unsubscribed from topic");
             // we are not subscribed
             return Ok(false);
@@ -563,7 +561,7 @@ where
 
         // call LEAVE(topic)
         // this will remove the topic from the mesh
-        self.leave(&topic_hash);
+        self.leave(topic_hash);
 
         tracing::debug!(topic=%topic_hash, "Unsubscribed from topic");
         Ok(true)
