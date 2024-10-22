@@ -390,6 +390,8 @@ impl NetworkBehaviour for Behaviour {
         let _entered = self.span.enter();
         let event = match event {
             Either::Left(e) => e,
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             Either::Right(v) => void::unreachable(v),
         };
 

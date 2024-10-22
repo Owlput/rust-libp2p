@@ -1193,10 +1193,14 @@ mod tests {
             >,
         ) {
             match event {
+                // TODO: remove when Rust 1.82 is MSRV
+                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                     protocol,
                     ..
                 }) => void::unreachable(protocol),
+                // TODO: remove when Rust 1.82 is MSRV
+                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                     protocol,
                     ..
@@ -1204,6 +1208,8 @@ mod tests {
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }
+                // TODO: remove when Rust 1.82 is MSRV
+                #[allow(unreachable_patterns)]
                 ConnectionEvent::AddressChange(_)
                 | ConnectionEvent::ListenUpgradeError(_)
                 | ConnectionEvent::LocalProtocolsChange(_)
@@ -1212,6 +1218,8 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             void::unreachable(event)
         }
 
@@ -1287,6 +1295,8 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             void::unreachable(event)
         }
 
