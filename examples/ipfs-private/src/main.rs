@@ -158,7 +158,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm
         .behaviour_mut()
         .gossipsub
-        .subscribe(&gossipsub_topic)
+        .subscribe(&gossipsub_topic.hash())
         .unwrap();
 
     // Reach out to other nodes if specified
