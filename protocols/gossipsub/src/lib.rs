@@ -126,7 +126,7 @@ pub use self::{
         MaxCountSubscriptionFilter, RegexSubscriptionFilter, TopicSubscriptionFilter,
         WhitelistSubscriptionFilter,
     },
-    topic::{Hasher, Topic, TopicHash},
+    topic::{Hasher, IdentityHash, Sha256Hash, Topic, TopicHash},
     transform::{DataTransform, IdentityTransform},
     types::{FailedMessages, Message, MessageAcceptance, MessageId, RawMessage},
 };
