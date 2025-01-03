@@ -81,7 +81,7 @@ where
         // subscribe to the topics
         for t in self.topics {
             let topic = Topic::new(t);
-            gs.subscribe(&topic).unwrap();
+            gs.subscribe(&topic.hash()).unwrap();
             topic_hashes.push(topic.hash().clone());
         }
 
@@ -488,11 +488,11 @@ fn test_unsubscribe() {
 
     // unsubscribe from both topics
     assert!(
-        gs.unsubscribe(&topics[0]),
+        gs.unsubscribe(&topics[0].hash()),
         "should be able to unsubscribe successfully from each topic",
     );
     assert!(
-        gs.unsubscribe(&topics[1]),
+        gs.unsubscribe(&topics[1].hash()),
         "should be able to unsubscribe successfully from each topic",
     );
 
@@ -550,17 +550,17 @@ fn test_join() {
 
     // unsubscribe, then call join to invoke functionality
     assert!(
-        gs.unsubscribe(&topics[0]),
+        gs.unsubscribe(&topics[0].hash()),
         "should be able to unsubscribe successfully"
     );
     assert!(
-        gs.unsubscribe(&topics[1]),
+        gs.unsubscribe(&topics[1].hash()),
         "should be able to unsubscribe successfully"
     );
 
     // re-subscribe - there should be peers associated with the topic
     assert!(
-        gs.subscribe(&topics[0]).unwrap(),
+        gs.subscribe(&topics[0].hash()).unwrap(),
         "should be able to subscribe successfully"
     );
 
@@ -652,7 +652,7 @@ fn test_join() {
     }
 
     // subscribe to topic1
-    gs.subscribe(&topics[1]).unwrap();
+    gs.subscribe(&topics[1].hash()).unwrap();
 
     // the three new peers should have been added, along with 3 more from the pool.
     assert!(
@@ -783,7 +783,7 @@ fn test_fanout() {
     );
     // Unsubscribe from topic
     assert!(
-        gs.unsubscribe(&Topic::new(fanout_topic.clone())),
+        gs.unsubscribe(&Topic::new(fanout_topic.clone()).hash()),
         "should be able to unsubscribe successfully from topic"
     );
 
@@ -1684,7 +1684,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
     }
 
     // subscribe now to topic
-    gs.subscribe(&topic).unwrap();
+    gs.subscribe(&topic.hash()).unwrap();
 
     // only peer 1 is in the mesh not peer 0 (which is an explicit peer)
     assert_eq!(gs.mesh[&topic_hash], vec![peers[1]].into_iter().collect());
@@ -1735,7 +1735,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
     gs.publish(topic.clone(), vec![1, 2, 3]).unwrap();
 
     // subscribe now to topic
-    gs.subscribe(&topic).unwrap();
+    gs.subscribe(&topic.hash()).unwrap();
 
     // only peer 1 is in the mesh not peer 0 (which is an explicit peer)
     assert_eq!(gs.mesh[&topic_hash], vec![peers[1]].into_iter().collect());
@@ -2130,7 +2130,7 @@ fn test_unsubscribe_backoff() {
         .gs_config(config)
         .create_network();
 
-    let _ = gs.unsubscribe(&Topic::new(topic));
+    let _ = gs.unsubscribe(&Topic::new(topic).hash());
 
     let (control_msgs, receivers) = count_control_msgs(receivers, |_, m| match m {
         RpcOut::Prune(Prune { backoff, .. }) => backoff == &Some(1),
@@ -2141,7 +2141,7 @@ fn test_unsubscribe_backoff() {
         "Peer should be pruned with `unsubscribe_backoff`."
     );
 
-    let _ = gs.subscribe(&Topic::new(topics[0].to_string()));
+    let _ = gs.subscribe(&Topic::new(topics[0].to_string()).hash());
 
     // forget all events until now
     let receivers = flush_events(&mut gs, receivers);
@@ -5167,8 +5167,8 @@ fn test_subscribe_to_invalid_topic() {
         .to_subscribe(false)
         .create_network();
 
-    assert!(gs.subscribe(&t1).is_ok());
-    assert!(gs.subscribe(&t2).is_err());
+    assert!(gs.subscribe(&t1.hash()).is_ok());
+    assert!(gs.subscribe(&t2.hash()).is_err());
 }
 
 #[test]
@@ -5197,7 +5197,7 @@ fn test_subscribe_and_graft_with_negative_score() {
     let original_score = gs1.peer_score.as_ref().unwrap().0.score(&p2);
 
     // subscribe to topic in gs2
-    gs2.subscribe(&topic).unwrap();
+    gs2.subscribe(&topic.hash()).unwrap();
 
     let forward_messages_to_p1 = |gs1: &mut Behaviour<_, _>,
                                   p1: PeerId,
@@ -5268,7 +5268,7 @@ fn test_graft_without_subscribe() {
     disconnect_peer(&mut gs, &peers[0]);
 
     // We unsubscribe from the topic.
-    let _ = gs.unsubscribe(&Topic::new(topic));
+    let _ = gs.unsubscribe(&Topic::new(topic).hash());
 }
 
 /// Test that a node sends IDONTWANT messages to the mesh peers

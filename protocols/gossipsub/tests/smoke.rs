@@ -149,7 +149,7 @@ fn multi_hop_propagation() {
             // Subscribe each node to the same topic.
             let topic = gossipsub::IdentTopic::new("test-net");
             for node in &mut graph.nodes {
-                node.behaviour_mut().subscribe(&topic).unwrap();
+                node.behaviour_mut().subscribe(&topic.hash()).unwrap();
             }
 
             // Wait for all nodes to be subscribed.

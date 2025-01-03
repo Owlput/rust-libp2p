@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a Gossipsub topic
     let topic = gossipsub::IdentTopic::new("test-net");
     // subscribes to our topic
-    swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
+    swarm.behaviour_mut().gossipsub.subscribe(&topic.hash())?;
 
     // Read full lines from stdin
     let mut stdin = io::BufReader::new(io::stdin()).lines();

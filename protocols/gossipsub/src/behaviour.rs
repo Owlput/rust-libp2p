@@ -526,9 +526,9 @@ where
     ///
     /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
     /// subscribed.
-    pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
+    pub fn subscribe(&mut self, topic: &TopicHash) -> Result<bool, SubscriptionError> {
         tracing::debug!(%topic, "Subscribing to topic");
-        let topic_hash = topic.hash();
+        let topic_hash = topic;
         if !self.subscription_filter.can_subscribe(&topic_hash) {
             return Err(SubscriptionError::NotAllowed);
         }
@@ -555,9 +555,9 @@ where
     /// Unsubscribes from a topic.
     ///
     /// Returns `true` if we were subscribed to this topic.
-    pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> bool {
+    pub fn unsubscribe(&mut self, topic: &TopicHash) -> bool {
         tracing::debug!(%topic, "Unsubscribing from topic");
-        let topic_hash = topic.hash();
+        let topic_hash = topic;
 
         if !self.mesh.contains_key(&topic_hash) {
             tracing::debug!(topic=%topic_hash, "Already unsubscribed from topic");
