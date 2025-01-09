@@ -599,7 +599,7 @@ where
             return Err(PublishError::MessageTooLarge);
         }
 
-        let raw_message = self.build_raw_message(topic, transformed_data)?;
+        let raw_message = self.build_raw_message(topic.clone(), transformed_data)?;
 
         // calculate the message id from the un-transformed data
         let msg_id = self.config.message_id(&Message {
@@ -614,13 +614,13 @@ where
             // This message has already been seen. We don't re-publish messages that have already
             // been published on the network.
             tracing::warn!(
-                message=%msg_id,
+                message=%msg_id, topic_hash=%topic,
                 "Not publishing a message that has already been published"
             );
             return Err(PublishError::Duplicate);
         }
 
-        tracing::trace!(message=%msg_id, "Publishing message");
+        tracing::trace!(message=%msg_id,topic_hash=%topic, "Publishing message");
 
         let topic_hash = raw_message.topic.clone();
 
@@ -632,6 +632,7 @@ where
             .peekable();
 
         if peers_on_topic.peek().is_none() {
+            tracing::trace!(topic_hash=%topic_hash, "Cannot publish message because no connected peer subscribes to the topic." );
             return Err(PublishError::InsufficientPeers);
         }
 
@@ -750,6 +751,7 @@ where
         }
 
         if recipient_peers.is_empty() {
+            tracing::trace!(topic_hash=%topic_hash, "Cannot publish message due to no recipient matches publish criteria.");
             return Err(PublishError::InsufficientPeers);
         }
 
