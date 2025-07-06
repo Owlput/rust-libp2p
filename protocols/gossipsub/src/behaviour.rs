@@ -620,12 +620,12 @@ where
 
         tracing::trace!(message=%msg_id, topic_hash=%raw_message.topic, "Publishing message");
 
-        let topic_hash = raw_message.topic.clone();
+        let topic_hash = &raw_message.topic;
 
         let mut peers_on_topic = self
             .connected_peers
             .iter()
-            .filter(|(_, p)| p.topics.contains(&topic_hash))
+            .filter(|(_, p)| p.topics.contains(topic_hash))
             .map(|(peer_id, _)| peer_id)
             .peekable();
 
@@ -644,7 +644,7 @@ where
                         .0
             }));
         } else {
-            match self.mesh.get(&topic_hash) {
+            match self.mesh.get(topic_hash) {
                 // Mesh peers
                 Some(mesh_peers) => {
                     // We have a mesh set. We want to make sure to publish to at least `mesh_n`
@@ -658,7 +658,7 @@ where
                         // Get a random set of peers that are appropriate to send messages too.
                         let peer_list = get_random_peers(
                             &self.connected_peers,
-                            &topic_hash,
+                            topic_hash,
                             needed_extra_peers,
                             |peer| {
                                 !mesh_peers.contains(peer)
@@ -680,7 +680,7 @@ where
                     // `fanout_peers` is always non-empty if it's `Some`.
                     let fanout_peers = self
                         .fanout
-                        .get(&topic_hash)
+                        .get(topic_hash)
                         .filter(|peers| !peers.is_empty());
                     // If we have fanout peers add them to the map.
                     if let Some(peers) = fanout_peers {
@@ -690,7 +690,7 @@ where
                     } else {
                         // We have no fanout peers, select mesh_n of them and add them to the fanout
                         let new_peers =
-                            get_random_peers(&self.connected_peers, &topic_hash, mesh_n, {
+                            get_random_peers(&self.connected_peers, topic_hash, mesh_n, {
                                 |p| {
                                     !self.explicit_peers.contains(p)
                                         && !self
@@ -719,7 +719,7 @@ where
             // Floodsub peers
             for (peer, connections) in &self.connected_peers {
                 if connections.kind == PeerKind::Floodsub
-                    && connections.topics.contains(&topic_hash)
+                    && connections.topics.contains(topic_hash)
                     && !self
                         .peer_score
                         .below_threshold(peer, |ts| ts.publish_threshold)
