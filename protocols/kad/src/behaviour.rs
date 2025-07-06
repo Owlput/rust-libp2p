@@ -238,29 +238,6 @@ impl Config {
         }
     }
 
-    /// Returns the default configuration.
-    #[deprecated(note = "Use `Config::new` instead")]
-    #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Self {
-        Default::default()
-    }
-
-    /// Sets custom protocol names.
-    ///
-    /// Kademlia nodes only communicate with other nodes using the same protocol
-    /// name. Using custom name(s) therefore allows to segregate the DHT from
-    /// others, if that is desired.
-    ///
-    /// More than one protocol name can be supplied. In this case the node will
-    /// be able to talk to other nodes supporting any of the provided names.
-    /// Multiple names must be used with caution to avoid network partitioning.
-    #[deprecated(note = "Use `Config::new` instead")]
-    #[allow(deprecated)]
-    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) -> &mut Self {
-        self.protocol_config.set_protocol_names(names);
-        self
-    }
-
     /// Sets the timeout for a single query.
     ///
     /// > **Note**: A single query usually comprises at least as many requests
@@ -402,6 +379,15 @@ impl Config {
     /// records.
     pub fn set_max_packet_size(&mut self, size: usize) -> &mut Self {
         self.protocol_config.set_max_packet_size(size);
+        self
+    }
+
+    /// Modifies the timeout duration of outbound substreams.
+    ///
+    /// * Default to `10` seconds.
+    /// * May need to increase this value when sending large records with poor connection.
+    pub fn set_substreams_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.protocol_config.set_substreams_timeout(timeout);
         self
     }
 
@@ -743,7 +729,7 @@ where
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
-        self.get_closest_peers_inner(key, None)
+        self.get_closest_peers_inner(key, K_VALUE)
     }
 
     /// Initiates an iterative query for the closest peers to the given key.
@@ -761,10 +747,10 @@ where
         // since it would involve forging a new key and additional requests.
         // Hence bound to K_VALUE here to set clear expectation and prevent unexpected behaviour.
         let capped_num_results = std::cmp::min(num_results, K_VALUE);
-        self.get_closest_peers_inner(key, Some(capped_num_results))
+        self.get_closest_peers_inner(key, capped_num_results)
     }
 
-    fn get_closest_peers_inner<K>(&mut self, key: K, num_results: Option<NonZeroUsize>) -> QueryId
+    fn get_closest_peers_inner<K>(&mut self, key: K, num_results: NonZeroUsize) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
@@ -801,7 +787,7 @@ where
         self.kbuckets
             .closest(key)
             .filter(move |e| e.node.key.preimage() != source)
-            .take(self.queries.config().replication_factor.get())
+            .take(K_VALUE.get())
             .map(KadPeer::from)
     }
 
@@ -837,7 +823,7 @@ where
         } else {
             QueryInfo::GetRecord {
                 key,
-                step: step.clone(),
+                step,
                 found_a_record: false,
                 cache_candidates: BTreeMap::new(),
             }
@@ -1076,7 +1062,14 @@ where
             .store
             .providers(&key)
             .into_iter()
-            .filter(|p| !p.is_expired(Instant::now()))
+            .filter(|p| {
+                if p.is_expired(Instant::now()) {
+                    self.store.remove_provider(&key, &p.provider);
+                    false
+                } else {
+                    true
+                }
+            })
             .map(|p| p.provider)
             .collect();
 
@@ -1086,7 +1079,7 @@ where
             key: key.clone(),
             providers_found: providers.len(),
             step: if providers.is_empty() {
-                step.clone()
+                step
             } else {
                 step.next()
             },
@@ -1243,19 +1236,19 @@ where
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
     fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
-        let kbuckets = &mut self.kbuckets;
-        let connected = &mut self.connected_peers;
-        let listen_addresses = &self.listen_addresses;
-        let external_addresses = &self.external_addresses;
-
         self.store
             .providers(key)
             .into_iter()
-            .filter_map(move |p| {
+            .filter_map(|p| {
+                if p.is_expired(Instant::now()) {
+                    self.store.remove_provider(key, &p.provider);
+                    return None;
+                }
+
                 if &p.provider != source {
                     let node_id = p.provider;
                     let multiaddrs = p.addresses;
-                    let connection_ty = if connected.contains(&node_id) {
+                    let connection_ty = if self.connected_peers.contains(&node_id) {
                         ConnectionType::Connected
                     } else {
                         ConnectionType::NotConnected
@@ -1267,17 +1260,17 @@ where
                         // try to find addresses in the routing table, as was
                         // done before provider records were stored along with
                         // their addresses.
-                        if &node_id == kbuckets.local_key().preimage() {
+                        if &node_id == self.kbuckets.local_key().preimage() {
                             Some(
-                                listen_addresses
+                                self.listen_addresses
                                     .iter()
-                                    .chain(external_addresses.iter())
+                                    .chain(self.external_addresses.iter())
                                     .cloned()
                                     .collect::<Vec<_>>(),
                             )
                         } else {
                             let key = kbucket::Key::from(node_id);
-                            kbuckets
+                            self.kbuckets
                                 .entry(&key)
                                 .as_mut()
                                 .and_then(|e| e.view())
@@ -2257,9 +2250,8 @@ where
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let peer_id = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
+        let Some(peer_id) = maybe_peer else {
+            return Ok(vec![]);
         };
 
         // We should order addresses from decreasing likelihood of connectivity, so start with
@@ -2375,7 +2367,7 @@ where
                 let peers = closer_peers.iter().chain(provider_peers.iter());
                 self.discovered(&query_id, &source, peers);
                 if let Some(query) = self.queries.get_mut(&query_id) {
-                    let stats = query.stats().clone();
+                    let stats = *query.stats();
                     if let QueryInfo::GetProviders {
                         ref key,
                         ref mut providers_found,
@@ -2395,7 +2387,7 @@ where
                                         providers,
                                     },
                                 )),
-                                step: step.clone(),
+                                step: *step,
                                 stats,
                             },
                         ));
@@ -2469,7 +2461,7 @@ where
                 query_id,
             } => {
                 if let Some(query) = self.queries.get_mut(&query_id) {
-                    let stats = query.stats().clone();
+                    let stats = *query.stats();
                     if let QueryInfo::GetRecord {
                         key,
                         ref mut step,
@@ -2490,7 +2482,7 @@ where
                                     result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(
                                         record,
                                     ))),
-                                    step: step.clone(),
+                                    step: *step,
                                     stats,
                                 },
                             ));
@@ -2504,11 +2496,7 @@ where
                                 let distance = source_key.distance(&target_key);
                                 cache_candidates.insert(distance, source);
                                 if cache_candidates.len() > max_peers as usize {
-                                    // TODO: `pop_last()` would be nice once stabilised.
-                                    // See https://github.com/rust-lang/rust/issues/62924.
-                                    let last =
-                                        *cache_candidates.keys().next_back().expect("len > 0");
-                                    cache_candidates.remove(&last);
+                                    cache_candidates.pop_last();
                                 }
                             }
                         }
@@ -2842,7 +2830,7 @@ pub enum Event {
 }
 
 /// Information about progress events.
-#[derive(Debug, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct ProgressStep {
     /// The index into the event
     pub count: NonZeroUsize,
@@ -2938,6 +2926,7 @@ pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 
 /// The successful result of [`Behaviour::get_record`].
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum GetRecordOk {
     FoundRecord(PeerRecord),
     FinishedWithNoAdditionalRecord {
@@ -3231,8 +3220,8 @@ pub enum QueryInfo {
         key: Vec<u8>,
         /// Current index of events.
         step: ProgressStep,
-        /// If required, `num_results` specifies expected responding peers
-        num_results: Option<NonZeroUsize>,
+        /// Specifies expected number of responding peers
+        num_results: NonZeroUsize,
     },
 
     /// A (repeated) query initiated by [`Behaviour::get_providers`].

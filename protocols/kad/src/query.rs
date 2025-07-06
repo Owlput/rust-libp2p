@@ -143,9 +143,9 @@ impl QueryPool {
     {
         let num_results = match info {
             QueryInfo::GetClosestPeers {
-                num_results: Some(val),
-                ..
+                num_results: val, ..
             } => val,
+            QueryInfo::Bootstrap { .. } => K_VALUE,
             _ => self.config.replication_factor,
         };
 
@@ -464,7 +464,7 @@ impl Query {
 }
 
 /// Execution statistics of a query.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryStats {
     requests: u32,
     success: u32,

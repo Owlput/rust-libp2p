@@ -110,8 +110,7 @@ pub use behaviour::{
 pub use connection::{pool::ConnectionCounters, ConnectionError, ConnectionId, SupportedProtocols};
 use connection::{
     pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent},
-    IncomingInfo, PendingConnectionError, PendingInboundConnectionError,
-    PendingOutboundConnectionError,
+    IncomingInfo, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 use dial_opts::{DialOpts, PeerCondition};
 pub use executor::Executor;
@@ -222,6 +221,8 @@ pub enum SwarmEvent<TBehaviourOutEvent> {
         send_back_addr: Multiaddr,
         /// The error that happened.
         error: ListenError,
+        /// If known, [`PeerId`] of the peer that tried to connect to us.
+        peer_id: Option<PeerId>,
     },
     /// An error happened on an outbound connection.
     OutgoingConnectionError {
@@ -757,6 +758,7 @@ where
                                         send_back_addr,
                                         local_addr,
                                         error: listen_error,
+                                        peer_id: Some(peer_id),
                                     },
                                 );
                                 return;
@@ -869,6 +871,7 @@ where
                         local_addr,
                         send_back_addr,
                         error,
+                        peer_id: None,
                     });
             }
             PoolEvent::ConnectionClosed {
@@ -975,6 +978,7 @@ where
                                 local_addr,
                                 send_back_addr,
                                 error: listen_error,
+                                peer_id: None,
                             });
                         return;
                     }
@@ -1416,15 +1420,6 @@ impl Config {
         Self::with_executor(crate::executor::TokioExecutor)
     }
 
-    /// Builds a new [`Config`] from the given `async-std` executor.
-    #[cfg(all(
-        feature = "async-std",
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
-    ))]
-    pub fn with_async_std_executor() -> Self {
-        Self::with_executor(crate::executor::AsyncStdExecutor)
-    }
-
     /// Configures the number of events from the [`NetworkBehaviour`] in
     /// destination to the [`ConnectionHandler`] that can be buffered before
     /// the [`Swarm`] has to wait. An individual buffer with this number of
@@ -1520,7 +1515,7 @@ impl Config {
 #[derive(Debug)]
 pub enum DialError {
     /// The peer identity obtained on the connection matches the local peer.
-    LocalPeerId { endpoint: ConnectedPoint },
+    LocalPeerId { address: Multiaddr },
     /// No addresses have been provided by [`NetworkBehaviour::handle_pending_outbound_connection`]
     /// and [`DialOpts`].
     NoAddresses,
@@ -1532,7 +1527,7 @@ pub enum DialError {
     /// The peer identity obtained on the connection did not match the one that was expected.
     WrongPeerId {
         obtained: PeerId,
-        endpoint: ConnectedPoint,
+        address: Multiaddr,
     },
     /// One of the [`NetworkBehaviour`]s rejected the outbound connection
     /// via [`NetworkBehaviour::handle_pending_outbound_connection`] or
@@ -1545,12 +1540,14 @@ pub enum DialError {
 impl From<PendingOutboundConnectionError> for DialError {
     fn from(error: PendingOutboundConnectionError) -> Self {
         match error {
-            PendingConnectionError::Aborted => DialError::Aborted,
-            PendingConnectionError::WrongPeerId { obtained, endpoint } => {
-                DialError::WrongPeerId { obtained, endpoint }
+            PendingOutboundConnectionError::Aborted => DialError::Aborted,
+            PendingOutboundConnectionError::WrongPeerId { obtained, address } => {
+                DialError::WrongPeerId { obtained, address }
             }
-            PendingConnectionError::LocalPeerId { endpoint } => DialError::LocalPeerId { endpoint },
-            PendingConnectionError::Transport(e) => DialError::Transport(e),
+            PendingOutboundConnectionError::LocalPeerId { address } => {
+                DialError::LocalPeerId { address }
+            }
+            PendingOutboundConnectionError::Transport(e) => DialError::Transport(e),
         }
     }
 }
@@ -1559,9 +1556,9 @@ impl fmt::Display for DialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
-            DialError::LocalPeerId { endpoint } => write!(
+            DialError::LocalPeerId { address } => write!(
                 f,
-                "Dial error: tried to dial local peer id at {endpoint:?}."
+                "Dial error: tried to dial local peer id at {address:?}."
             ),
             DialError::DialPeerConditionFalse(PeerCondition::Disconnected) => write!(f, "Dial error: dial condition was configured to only happen when disconnected (`PeerCondition::Disconnected`), but node is already connected, thus cancelling new dial."),
             DialError::DialPeerConditionFalse(PeerCondition::NotDialing) => write!(f, "Dial error: dial condition was configured to only happen if there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but a dial is in progress, thus cancelling new dial."),
@@ -1571,9 +1568,9 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
-            DialError::WrongPeerId { obtained, endpoint } => write!(
+            DialError::WrongPeerId { obtained, address } => write!(
                 f,
-                "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
+                "Dial error: Unexpected peer ID {obtained} at {address:?}."
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
@@ -1630,7 +1627,7 @@ pub enum ListenError {
     },
     /// The connection was dropped because it resolved to our own [`PeerId`].
     LocalPeerId {
-        endpoint: ConnectedPoint,
+        address: Multiaddr,
     },
     Denied {
         cause: ConnectionDenied,
@@ -1644,11 +1641,8 @@ impl From<PendingInboundConnectionError> for ListenError {
         match error {
             PendingInboundConnectionError::Transport(inner) => ListenError::Transport(inner),
             PendingInboundConnectionError::Aborted => ListenError::Aborted,
-            PendingInboundConnectionError::WrongPeerId { obtained, endpoint } => {
-                ListenError::WrongPeerId { obtained, endpoint }
-            }
-            PendingInboundConnectionError::LocalPeerId { endpoint } => {
-                ListenError::LocalPeerId { endpoint }
+            PendingInboundConnectionError::LocalPeerId { address } => {
+                ListenError::LocalPeerId { address }
             }
         }
     }
@@ -1671,8 +1665,8 @@ impl fmt::Display for ListenError {
             ListenError::Denied { cause } => {
                 write!(f, "Listen error: Denied: {cause}")
             }
-            ListenError::LocalPeerId { endpoint } => {
-                write!(f, "Listen error: Local peer ID at {endpoint:?}.")
+            ListenError::LocalPeerId { address } => {
+                write!(f, "Listen error: Local peer ID at {address:?}.")
             }
         }
     }
@@ -1768,8 +1762,8 @@ mod tests {
         multiaddr,
         multiaddr::multiaddr,
         transport,
-        transport::{memory::MemoryTransportError, PortUse, TransportEvent},
-        upgrade, Endpoint,
+        transport::{memory::MemoryTransportError, TransportEvent},
+        upgrade,
     };
     use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
@@ -2159,16 +2153,9 @@ mod tests {
         .await;
         assert_eq!(peer_id.unwrap(), other_id);
         match error {
-            DialError::WrongPeerId { obtained, endpoint } => {
+            DialError::WrongPeerId { obtained, address } => {
                 assert_eq!(obtained, *swarm1.local_peer_id());
-                assert_eq!(
-                    endpoint,
-                    ConnectedPoint::Dialer {
-                        address: other_addr,
-                        role_override: Endpoint::Dialer,
-                        port_use: PortUse::Reuse,
-                    }
-                );
+                assert_eq!(address, other_addr);
             }
             x => panic!("wrong error {x:?}"),
         }
@@ -2303,7 +2290,9 @@ mod tests {
 
     #[tokio::test]
     async fn aborting_pending_connection_surfaces_error() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         let mut dialer = new_test_swarm(Config::with_tokio_executor());
         let mut listener = new_test_swarm(Config::with_tokio_executor());
@@ -2341,10 +2330,7 @@ mod tests {
         // This constitutes a fairly typical error for chained transports.
         let error = DialError::Transport(vec![(
             "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
-            TransportError::Other(io::Error::new(
-                io::ErrorKind::Other,
-                MemoryTransportError::Unreachable,
-            )),
+            TransportError::Other(io::Error::other(MemoryTransportError::Unreachable)),
         )]);
 
         let string = format!("{error}");

@@ -26,7 +26,7 @@
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
 
-use std::{io, iter, marker::PhantomData, time::Duration};
+use std::{io, marker::PhantomData, time::Duration};
 
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
@@ -49,6 +49,8 @@ use crate::{
 pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
 /// The default maximum size for a varint length-delimited packet.
 pub(crate) const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
+/// The default timeout of outbound_substreams to be 10 (seconds).
+const DEFAULT_SUBSTREAMS_TIMEOUT_S: Duration = Duration::from_secs(10);
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum ConnectionType {
@@ -145,6 +147,8 @@ pub struct ProtocolConfig {
     protocol_names: Vec<StreamProtocol>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
+    /// Specifies the outbound_substreams timeout in seconds
+    substreams_timeout_s: Duration,
 }
 
 impl ProtocolConfig {
@@ -153,14 +157,8 @@ impl ProtocolConfig {
         ProtocolConfig {
             protocol_names: vec![protocol_name],
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
+            substreams_timeout_s: DEFAULT_SUBSTREAMS_TIMEOUT_S,
         }
-    }
-
-    /// Returns the default configuration.
-    #[deprecated(note = "Use `ProtocolConfig::new` instead")]
-    #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Self {
-        Default::default()
     }
 
     /// Returns the configured protocol name.
@@ -168,28 +166,19 @@ impl ProtocolConfig {
         &self.protocol_names
     }
 
-    /// Modifies the protocol names used on the wire. Can be used to create incompatibilities
-    /// between networks on purpose.
-    #[deprecated(note = "Use `ProtocolConfig::new` instead")]
-    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) {
-        self.protocol_names = names;
-    }
-
     /// Modifies the maximum allowed size of a single Kademlia packet.
     pub fn set_max_packet_size(&mut self, size: usize) {
         self.max_packet_size = size;
     }
-}
 
-impl Default for ProtocolConfig {
-    /// Returns the default configuration.
-    ///
-    /// Deprecated: use `ProtocolConfig::new` instead.
-    fn default() -> Self {
-        ProtocolConfig {
-            protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
-            max_packet_size: DEFAULT_MAX_PACKET_SIZE,
-        }
+    /// Modifies the outbound substreams timeout.
+    pub fn set_substreams_timeout(&mut self, timeout: Duration) {
+        self.substreams_timeout_s = timeout;
+    }
+
+    /// Getter of substreams_timeout_s.
+    pub fn substreams_timeout_s(&self) -> Duration {
+        self.substreams_timeout_s
     }
 }
 

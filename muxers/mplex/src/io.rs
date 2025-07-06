@@ -41,7 +41,7 @@ use smallvec::SmallVec;
 
 use crate::{
     codec::{Codec, Frame, LocalStreamId, RemoteStreamId},
-    MaxBufferBehaviour, MplexConfig,
+    Config, MaxBufferBehaviour,
 };
 /// A connection identifier.
 ///
@@ -70,7 +70,7 @@ pub(crate) struct Multiplexed<C> {
     /// The underlying multiplexed I/O stream.
     io: Fuse<Framed<C, Codec>>,
     /// The configuration.
-    config: MplexConfig,
+    config: Config,
     /// The buffer of new inbound substreams that have not yet
     /// been drained by `poll_next_stream`. This buffer is
     /// effectively bounded by `max_substreams - substreams.len()`.
@@ -122,7 +122,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     /// Creates a new multiplexed I/O stream.
-    pub(crate) fn new(io: C, config: MplexConfig) -> Self {
+    pub(crate) fn new(io: C, config: Config) -> Self {
         let id = ConnectionId(rand::random());
         tracing::debug!(connection=%id, "New multiplexed connection");
         Multiplexed {
@@ -713,8 +713,7 @@ where
                 substream=%id,
                 "Received unexpected `Open` frame for open substream",
             );
-            return self.on_error(io::Error::new(
-                io::ErrorKind::Other,
+            return self.on_error(io::Error::other(
                 "Protocol error: Received `Open` frame for open substream.",
             ));
         }
@@ -890,7 +889,7 @@ where
     /// i.e. is not closed and did not encounter a fatal error.
     fn guard_open(&self) -> io::Result<()> {
         match &self.status {
-            Status::Closed => Err(io::Error::new(io::ErrorKind::Other, "Connection is closed")),
+            Status::Closed => Err(io::Error::other("Connection is closed")),
             Status::Err(e) => Err(io::Error::new(e.kind(), e.to_string())),
             Status::Open => Ok(()),
         }
@@ -900,10 +899,7 @@ where
     /// has not been reached.
     fn check_max_pending_frames(&mut self) -> io::Result<()> {
         if self.pending_frames.len() >= self.config.max_substreams + EXTRA_PENDING_FRAMES {
-            return self.on_error(io::Error::new(
-                io::ErrorKind::Other,
-                "Too many pending frames.",
-            ));
+            return self.on_error(io::Error::other("Too many pending frames."));
         }
         Ok(())
     }
@@ -1154,10 +1150,10 @@ const EXTRA_PENDING_FRAMES: usize = 1000;
 mod tests {
     use std::{collections::HashSet, num::NonZeroU8, ops::DerefMut, pin::Pin};
 
-    use async_std::task;
     use asynchronous_codec::{Decoder, Encoder};
     use bytes::BytesMut;
     use quickcheck::*;
+    use tokio::runtime::Runtime;
 
     use super::*;
 
@@ -1168,9 +1164,9 @@ mod tests {
         }
     }
 
-    impl Arbitrary for MplexConfig {
-        fn arbitrary(g: &mut Gen) -> MplexConfig {
-            MplexConfig {
+    impl Arbitrary for Config {
+        fn arbitrary(g: &mut Gen) -> Config {
+            Config {
                 max_substreams: g.gen_range(1..100),
                 max_buffer_len: g.gen_range(1..1000),
                 max_buffer_behaviour: MaxBufferBehaviour::arbitrary(g),
@@ -1231,9 +1227,12 @@ mod tests {
 
     #[test]
     fn max_buffer_behaviour() {
-        libp2p_test_utils::with_default_env_filter();
+        use tracing_subscriber::EnvFilter;
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
-        fn prop(cfg: MplexConfig, overflow: NonZeroU8) {
+        fn prop(cfg: Config, overflow: NonZeroU8) {
             let mut r_buf = BytesMut::new();
             let mut codec = Codec::new();
 
@@ -1266,7 +1265,8 @@ mod tests {
             };
             let mut m = Multiplexed::new(conn, cfg.clone());
 
-            task::block_on(future::poll_fn(move |cx| {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(future::poll_fn(move |cx| {
                 // Receive all inbound streams.
                 for i in 0..cfg.max_substreams {
                     match m.poll_next_stream(cx) {
@@ -1366,9 +1366,12 @@ mod tests {
 
     #[test]
     fn close_on_error() {
-        libp2p_test_utils::with_default_env_filter();
+        use tracing_subscriber::EnvFilter;
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
-        fn prop(cfg: MplexConfig, num_streams: NonZeroU8) {
+        fn prop(cfg: Config, num_streams: NonZeroU8) {
             let num_streams = cmp::min(cfg.max_substreams, num_streams.get() as usize);
 
             // Setup the multiplexed connection.
@@ -1381,7 +1384,8 @@ mod tests {
 
             // Run the test.
             let mut opened = HashSet::new();
-            task::block_on(future::poll_fn(move |cx| {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(future::poll_fn(move |cx| {
                 // Open a number of streams.
                 for _ in 0..num_streams {
                     let id = ready!(m.poll_open_stream(cx)).unwrap();

@@ -60,13 +60,12 @@ impl ExternalAddresses {
             FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
                 addr: expired_addr, ..
             }) => {
-                let pos = match self
+                let Some(pos) = self
                     .addresses
                     .iter()
                     .position(|candidate| candidate == *expired_addr)
-                {
-                    None => return false,
-                    Some(p) => p,
+                else {
+                    return false;
                 };
 
                 self.addresses.remove(pos);
@@ -87,8 +86,9 @@ impl ExternalAddresses {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use libp2p_core::multiaddr::Protocol;
-    use once_cell::sync::Lazy;
     use rand::Rng;
 
     use super::*;
@@ -179,8 +179,8 @@ mod tests {
         })
     }
 
-    static MEMORY_ADDR_1000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
-    static MEMORY_ADDR_2000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
+    static MEMORY_ADDR_1000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
+    static MEMORY_ADDR_2000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
 }

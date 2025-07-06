@@ -93,7 +93,7 @@ macro_rules! impl_websocket_builder {
             {
                 let security_upgrade = security_upgrade.into_security_upgrade(&self.keypair)
                     .map_err(WebsocketErrorInner::SecurityUpgrade)?;
-                let websocket_transport = libp2p_websocket::WsConfig::new(
+                let websocket_transport = libp2p_websocket::Config::new(
                     $dnsTcp.await.map_err(WebsocketErrorInner::Dns)?,
                 )
                     .upgrade(libp2p_core::upgrade::Version::V1Lazy)
@@ -115,16 +115,6 @@ macro_rules! impl_websocket_builder {
     };
 }
 
-impl_websocket_builder!(
-    "async-std",
-    super::provider::AsyncStd,
-    libp2p_dns::async_std::Transport::system(libp2p_tcp::async_io::Transport::new(
-        libp2p_tcp::Config::default(),
-    )),
-    rw_stream_sink::RwStreamSink<
-        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
-    >
-);
 impl_websocket_builder!(
     "tokio",
     super::provider::Tokio,
@@ -159,7 +149,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider> SwarmBuilder<Provider, Webs
     ) -> Result<
         SwarmBuilder<
             Provider,
-            BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         SecUpgrade::Error,
         > where
@@ -199,7 +189,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Webs
     > {
         self.without_websocket()
             .without_relay()
-            .without_bandwidth_logging()
             .with_bandwidth_metrics(registry)
     }
 }
@@ -210,7 +199,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Webs
     ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_websocket()
             .without_relay()
-            .without_bandwidth_logging()
             .with_behaviour(constructor)
     }
 }

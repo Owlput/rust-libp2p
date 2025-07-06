@@ -23,13 +23,8 @@
 
 use std::{pin::Pin, time::Duration};
 
-use async_std::task;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use futures::{
-    channel::oneshot,
-    future::{join, poll_fn},
-    prelude::*,
-};
+use futures::{channel::oneshot, future::poll_fn, prelude::*};
 use libp2p_core::{
     multiaddr::multiaddr, muxing, muxing::StreamMuxerExt, transport, transport::ListenerId,
     upgrade, Endpoint, Multiaddr, Transport,
@@ -38,6 +33,8 @@ use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_mplex as mplex;
 use libp2p_plaintext as plaintext;
+use tokio::runtime::Runtime;
+use tracing_subscriber::EnvFilter;
 
 type BenchTransport = transport::Boxed<(PeerId, muxing::StreamMuxerBox)>;
 
@@ -54,7 +51,9 @@ const BENCH_SIZES: [usize; 8] = [
 ];
 
 fn prepare(c: &mut Criterion) {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let payload: Vec<u8> = vec![1; 1024 * 1024];
 
@@ -177,14 +176,17 @@ fn run(
     };
 
     // Wait for all data to be received.
-    task::block_on(join(sender, receiver));
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        tokio::join!(sender, receiver);
+    });
 }
 
 fn tcp_transport(split_send_size: usize) -> BenchTransport {
-    let mut mplex = mplex::MplexConfig::default();
+    let mut mplex = mplex::Config::default();
     mplex.set_split_send_size(split_send_size);
 
-    libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().nodelay(true))
+    libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(plaintext::Config::new(
             &identity::Keypair::generate_ed25519(),
@@ -195,7 +197,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
 }
 
 fn mem_transport(split_send_size: usize) -> BenchTransport {
-    let mut mplex = mplex::MplexConfig::default();
+    let mut mplex = mplex::Config::default();
     mplex.set_split_send_size(split_send_size);
 
     transport::MemoryTransport::default()

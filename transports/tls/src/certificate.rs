@@ -99,26 +99,22 @@ pub fn generate(
     // Endpoints MAY generate a new key and certificate
     // for every connection attempt, or they MAY reuse the same key
     // and certificate for multiple connections.
-    let certificate_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
+    let certificate_keypair = rcgen::KeyPair::generate_for(P2P_SIGNATURE_ALGORITHM)?;
     let rustls_key = rustls::pki_types::PrivateKeyDer::from(
         rustls::pki_types::PrivatePkcs8KeyDer::from(certificate_keypair.serialize_der()),
     );
 
     let certificate = {
-        let mut params = rcgen::CertificateParams::new(vec![]);
+        let mut params = rcgen::CertificateParams::default();
         params.distinguished_name = rcgen::DistinguishedName::new();
         params.custom_extensions.push(make_libp2p_extension(
             identity_keypair,
             &certificate_keypair,
         )?);
-        params.alg = P2P_SIGNATURE_ALGORITHM;
-        params.key_pair = Some(certificate_keypair);
-        rcgen::Certificate::from_params(params)?
+        params.self_signed(&certificate_keypair)?
     };
 
-    let rustls_certificate = rustls::pki_types::CertificateDer::from(certificate.serialize_der()?);
-
-    Ok((rustls_certificate, rustls_key))
+    Ok((certificate.into(), rustls_key))
 }
 
 /// Attempts to parse the provided bytes as a [`P2pCertificate`].
@@ -158,7 +154,7 @@ pub struct P2pExtension {
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct GenError(#[from] rcgen::RcgenError);
+pub struct GenError(#[from] rcgen::Error);
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
@@ -171,7 +167,7 @@ pub struct VerificationError(#[from] pub(crate) webpki::Error);
 /// Internal function that only parses but does not verify the certificate.
 ///
 /// Useful for testing but unsuitable for production.
-fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
+fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate<'_>, webpki::Error> {
     let x509 = X509Certificate::from_der(der_input)
         .map(|(_rest_input, x509)| x509)
         .map_err(|_| webpki::Error::BadDer)?;
@@ -244,7 +240,7 @@ fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
 fn make_libp2p_extension(
     identity_keypair: &identity::Keypair,
     certificate_keypair: &rcgen::KeyPair,
-) -> Result<rcgen::CustomExtension, rcgen::RcgenError> {
+) -> Result<rcgen::CustomExtension, rcgen::Error> {
     // The peer signs the concatenation of the string `libp2p-tls-handshake:`
     // and the public key that it used to generate the certificate carrying
     // the libp2p Public Key Extension, using its private host key.
@@ -255,7 +251,7 @@ fn make_libp2p_extension(
 
         identity_keypair
             .sign(&msg)
-            .map_err(|_| rcgen::RcgenError::RingUnspecified)?
+            .map_err(|_| rcgen::Error::RingUnspecified)?
     };
 
     // The public host key and the signature are ANS.1-encoded

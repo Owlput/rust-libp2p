@@ -1,18 +1,17 @@
 [package]
 name = "libp2p-quic"
-version = "0.11.2"
+version = "0.13.0"
 authors = ["Parity Technologies <admin@parity.io>"]
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "TLS based QUIC transport implementation for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 
 [dependencies]
-async-std = { version = "1.12.0", optional = true }
 futures = { workspace = true }
 futures-timer = "3.0.3"
-if-watch = "3.2.0"
+if-watch = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -27,7 +26,6 @@ ring = { workspace = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
-async-std = ["dep:async-std", "if-watch/smol", "quinn/runtime-async-std"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -35,19 +33,18 @@ async-std = ["dep:async-std", "if-watch/smol", "quinn/runtime-async-std"]
 all-features = true
 
 [dev-dependencies]
-async-std = { version = "1.12.0", features = ["attributes"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
 libp2p-noise = { workspace = true }
-libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-yamux = { workspace = true }
 quickcheck = "1"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
-libp2p-test-utils = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[test]]
 name = "stream_compliance"
-required-features = ["async-std"]
+required-features = ["tokio"]
 
 [lints]
 workspace = true

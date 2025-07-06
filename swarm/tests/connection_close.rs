@@ -12,10 +12,10 @@ use libp2p_swarm::{
 };
 use libp2p_swarm_test::SwarmExt;
 
-#[async_std::test]
+#[tokio::test]
 async fn sends_remaining_events_to_behaviour_on_connection_close() {
-    let mut swarm1 = Swarm::new_ephemeral(|_| Behaviour::new(3));
-    let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(3));
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|_| Behaviour::new(3));
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|_| Behaviour::new(3));
 
     swarm2.listen().with_memory_addr_external().await;
     swarm1.connect(&mut swarm2).await;
@@ -27,7 +27,7 @@ async fn sends_remaining_events_to_behaviour_on_connection_close() {
             assert_eq!(swarm1.behaviour().state, 0);
             assert_eq!(swarm2.behaviour().state, 0);
         }
-        (e1, e2) => panic!("Unexpected events: {:?} {:?}", e1, e2),
+        (e1, e2) => panic!("Unexpected events: {e1:?} {e2:?}"),
     }
 }
 
@@ -103,7 +103,7 @@ impl ConnectionHandler for HandlerWithState {
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
@@ -114,9 +114,7 @@ impl ConnectionHandler for HandlerWithState {
     fn poll(
         &mut self,
         _: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         Poll::Pending
     }
 
@@ -137,12 +135,7 @@ impl ConnectionHandler for HandlerWithState {
 
     fn on_connection_event(
         &mut self,
-        _: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        _: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
     }
 }

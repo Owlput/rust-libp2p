@@ -36,9 +36,7 @@ use std::{
 };
 
 pub use error::ConnectionError;
-pub(crate) use error::{
-    PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
-};
+pub(crate) use error::{PendingInboundConnectionError, PendingOutboundConnectionError};
 use futures::{future::BoxFuture, stream, stream::FuturesUnordered, FutureExt, StreamExt};
 use futures_timer::Delay;
 use libp2p_core::{
@@ -640,9 +638,7 @@ fn to_stream_upgrade_error<T>(e: NegotiationError) -> StreamUpgradeError<T> {
     match e {
         NegotiationError::Failed => StreamUpgradeError::NegotiationFailed,
         NegotiationError::ProtocolError(ProtocolError::IoError(e)) => StreamUpgradeError::Io(e),
-        NegotiationError::ProtocolError(other) => {
-            StreamUpgradeError::Io(io::Error::new(io::ErrorKind::Other, other))
-        }
+        NegotiationError::ProtocolError(other) => StreamUpgradeError::Io(io::Error::other(other)),
     }
 }
 
@@ -801,13 +797,16 @@ mod tests {
         StreamMuxer,
     };
     use quickcheck::*;
+    use tracing_subscriber::EnvFilter;
 
     use super::*;
     use crate::dummy;
 
     #[test]
     fn max_negotiating_inbound_streams() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
@@ -975,7 +974,9 @@ mod tests {
 
     #[test]
     fn checked_add_fraction_can_add_u64_max() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
         let start = Instant::now();
 
         let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
@@ -985,7 +986,9 @@ mod tests {
 
     #[test]
     fn compute_new_shutdown_does_not_panic() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         #[derive(Debug)]
         struct ArbitraryShutdown(Shutdown);
@@ -1193,30 +1196,19 @@ mod tests {
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 
-        fn listen_protocol(
-            &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
             SubstreamProtocol::new(DeniedUpgrade, ()).with_timeout(self.upgrade_timeout)
         }
 
         fn on_connection_event(
             &mut self,
-            event: ConnectionEvent<
-                Self::InboundProtocol,
-                Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
-            >,
+            event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
         ) {
             match event {
-                // TODO: remove when Rust 1.82 is MSRV
-                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                     protocol,
                     ..
                 }) => libp2p_core::util::unreachable(protocol),
-                // TODO: remove when Rust 1.82 is MSRV
-                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                     protocol,
                     ..
@@ -1224,8 +1216,6 @@ mod tests {
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }
-                // TODO: remove when Rust 1.82 is MSRV
-                #[allow(unreachable_patterns)]
                 ConnectionEvent::AddressChange(_)
                 | ConnectionEvent::ListenUpgradeError(_)
                 | ConnectionEvent::LocalProtocolsChange(_)
@@ -1234,8 +1224,6 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             libp2p_core::util::unreachable(event)
         }
 
@@ -1246,13 +1234,7 @@ mod tests {
         fn poll(
             &mut self,
             _: &mut Context<'_>,
-        ) -> Poll<
-            ConnectionHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::ToBehaviour,
-            >,
-        > {
+        ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
             if self.outbound_requested {
                 self.outbound_requested = false;
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -1273,9 +1255,7 @@ mod tests {
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 
-        fn listen_protocol(
-            &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
             SubstreamProtocol::new(
                 ManyProtocolsUpgrade {
                     protocols: Vec::from_iter(self.active_protocols.clone()),
@@ -1286,12 +1266,7 @@ mod tests {
 
         fn on_connection_event(
             &mut self,
-            event: ConnectionEvent<
-                Self::InboundProtocol,
-                Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
-            >,
+            event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
         ) {
             match event {
                 ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
@@ -1311,8 +1286,6 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             libp2p_core::util::unreachable(event)
         }
 
@@ -1323,13 +1296,7 @@ mod tests {
         fn poll(
             &mut self,
             _: &mut Context<'_>,
-        ) -> Poll<
-            ConnectionHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::ToBehaviour,
-            >,
-        > {
+        ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
             if let Some(event) = self.events.pop() {
                 return Poll::Ready(event);
             }

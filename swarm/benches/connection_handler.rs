@@ -1,7 +1,7 @@
 use std::{convert::Infallible, sync::atomic::AtomicUsize};
 
-use async_std::stream::StreamExt;
 use criterion::{criterion_group, criterion_main, Criterion};
+use futures::stream::StreamExt;
 use libp2p_core::{
     transport::MemoryTransport, InboundUpgrade, Multiaddr, OutboundUpgrade, Transport, UpgradeInfo,
 };
@@ -281,9 +281,7 @@ impl ConnectionHandler for SpinningHandler {
 
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(
-        &self,
-    ) -> libp2p_swarm::SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> libp2p_swarm::SubstreamProtocol<Self::InboundProtocol> {
         libp2p_swarm::SubstreamProtocol::new(Upgrade(self.protocols), ())
     }
 
@@ -291,11 +289,7 @@ impl ConnectionHandler for SpinningHandler {
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<
-        libp2p_swarm::ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-        >,
+        libp2p_swarm::ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
     > {
         if self.iter_count == usize::MAX {
             return std::task::Poll::Pending;
@@ -322,8 +316,6 @@ impl ConnectionHandler for SpinningHandler {
         _event: libp2p_swarm::handler::ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
         >,
     ) {
     }

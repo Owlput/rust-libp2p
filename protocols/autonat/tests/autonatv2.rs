@@ -11,10 +11,13 @@ use libp2p_swarm::{
 use libp2p_swarm_test::SwarmExt;
 use rand_core::OsRng;
 use tokio::sync::oneshot;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn confirm_successful() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let (mut alice, mut bob) = start_and_connect().await;
 
     let cor_server_peer = *alice.local_peer_id();
@@ -125,7 +128,9 @@ async fn confirm_successful() {
 
 #[tokio::test]
 async fn dial_back_to_unsupported_protocol() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let (mut alice, mut bob) = bootstrap().await;
 
     let alice_peer_id = *alice.local_peer_id();
@@ -221,7 +226,9 @@ async fn dial_back_to_unsupported_protocol() {
 
 #[tokio::test]
 async fn dial_back_to_non_libp2p() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let (mut alice, mut bob) = bootstrap().await;
     let alice_peer_id = *alice.local_peer_id();
 
@@ -307,7 +314,9 @@ async fn dial_back_to_non_libp2p() {
 
 #[tokio::test]
 async fn dial_back_to_not_supporting() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let (mut alice, mut bob) = bootstrap().await;
     let alice_peer_id = *alice.local_peer_id();
@@ -405,7 +414,7 @@ async fn dial_back_to_not_supporting() {
 }
 
 async fn new_server() -> Swarm<CombinedServer> {
-    let mut node = Swarm::new_ephemeral(|identity| CombinedServer {
+    let mut node = Swarm::new_ephemeral_tokio(|identity| CombinedServer {
         autonat: libp2p_autonat::v2::server::Behaviour::default(),
         identify: libp2p_identify::Behaviour::new(libp2p_identify::Config::new(
             "/libp2p-test/1.0.0".into(),
@@ -418,7 +427,7 @@ async fn new_server() -> Swarm<CombinedServer> {
 }
 
 async fn new_client() -> Swarm<CombinedClient> {
-    let mut node = Swarm::new_ephemeral(|identity| CombinedClient {
+    let mut node = Swarm::new_ephemeral_tokio(|identity| CombinedClient {
         autonat: libp2p_autonat::v2::client::Behaviour::new(
             OsRng,
             Config::default().with_probe_interval(Duration::from_millis(100)),
@@ -447,7 +456,7 @@ struct CombinedClient {
 }
 
 async fn new_dummy() -> Swarm<libp2p_identify::Behaviour> {
-    let mut node = Swarm::new_ephemeral(|identity| {
+    let mut node = Swarm::new_ephemeral_tokio(|identity| {
         libp2p_identify::Behaviour::new(libp2p_identify::Config::new(
             "/libp2p-test/1.0.0".into(),
             identity.public().clone(),

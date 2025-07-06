@@ -113,9 +113,8 @@ where
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let p = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
+        let Some(p) = maybe_peer else {
+            return Ok(vec![]);
         };
 
         Ok(self.addresses.get(&p).map_or(Vec::new(), |v| v.clone()))
@@ -240,8 +239,8 @@ where
             assert_eq!(
                 self.on_connection_established
                     .iter()
-                    .filter(|(.., reported_aditional_connections)| {
-                        *reported_aditional_connections == 0
+                    .filter(|(.., reported_additional_connections)| {
+                        *reported_additional_connections == 0
                     })
                     .count(),
                 expected_connections
